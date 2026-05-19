@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>수학 유사문제 추천</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #F8F6F1; --surface: #FFF; --surface2: #F0EDE6;
+      --accent: #1B4332; --accent2: #2D6A4F; --accent-light: #D8F3DC;
+      --text: #1A1A16; --text2: #52524A; --text3: #8A8A80;
+      --border: #DDD9D0; --r: 6px; --r2: 12px;
+    }
+    body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { background: var(--accent); color: white; height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .logo { font-family: 'Noto Serif KR', serif; font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+    .logo-dot { width: 7px; height: 7px; background: #74C69D; border-radius: 50%; }
+    .hbadge { font-size: 0.72rem; background: rgba(255,255,255,0.15); padding: 3px 10px; border-radius: 20px; }
+    .hero { background: linear-gradient(160deg, #1B4332 60%, #2D6A4F); padding: 3rem 1.5rem 2.5rem; text-align: center; color: white; }
+    .hero h1 { font-family: 'Noto Serif KR', serif; font-size: clamp(1.3rem, 3vw, 1.9rem); font-weight: 700; margin-bottom: 0.5rem; }
+    .hero p { font-size: 0.88rem; opacity: 0.8; }
+    main { max-width: 840px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 1.4rem 1.5rem; margin-bottom: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+    .slabel { font-size: 0.7rem; font-weight: 600; color: var(--text3); letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 0.7rem; }
+    .db-progress-wrap { margin-top: 10px; display: none; }
+    .db-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .db-fill { height: 100%; background: var(--accent2); border-radius: 3px; width: 0%; transition: width 0.3s; }
+    .db-status { font-size: 0.78rem; margin-top: 6px; color: var(--text3); }
+    .db-ok { color: #1B4332; font-weight: 500; }
+    .upload-zone { border: 2px dashed #B8B4AA; border-radius: var(--r2); padding: 2.5rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--bg); position: relative; }
+    .upload-zone:hover, .upload-zone.drag { border-color: var(--accent2); background: var(--accent-light); }
+    .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .upload-icon { font-size: 2.2rem; margin-bottom: 0.6rem; }
+    .upload-zone h3 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.3rem; }
+    .upload-zone p { font-size: 0.8rem; color: var(--text3); }
+    .preview-wrap { display: none; text-align: center; }
+    .preview-wrap img { max-width: 100%; max-height: 280px; border-radius: var(--r); border: 1px solid var(--border); object-fit: contain; }
+    .preview-name { font-size: 0.78rem; color: var(--text3); margin-top: 5px; }
+    .change-btn { font-size: 0.76rem; color: var(--accent2); background: none; border: 1px solid var(--border); border-radius: 20px; padding: 3px 12px; cursor: pointer; margin-top: 7px; font-family: inherit; }
+    .filter-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    select { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--r); font-family: inherit; font-size: 0.87rem; color: var(--text); background: var(--bg); outline: none; transition: border-color 0.2s; }
+    select:focus { border-color: var(--accent2); }
+    .btn { width: 100%; background: var(--accent); color: white; border: none; padding: 13px; border-radius: var(--r); font-size: 0.93rem; font-weight: 500; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 1rem; transition: background 0.2s; }
+    .btn:hover { background: var(--accent2); }
+    .btn:disabled { background: var(--text3); cursor: not-allowed; }
+    .btn-sm { width: auto; padding: 8px 16px; font-size: 0.82rem; margin-top: 0.6rem; }
+    .spin { width: 17px; height: 17px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: rot 0.7s linear infinite; display: none; }
+    @keyframes rot { to { transform: rotate(360deg); } }
+    .err { background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: var(--r); padding: 0.85rem 1rem; color: #991B1B; font-size: 0.85rem; margin-top: 0.9rem; display: none; }
+    .loading { display: none; padding: 3rem; text-align: center; }
+    .lspin { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: rot 0.8s linear infinite; margin: 0 auto 0.9rem; }
+    .loading p { font-size: 0.87rem; color: var(--text3); }
+    .lstep { font-size: 0.76rem; margin-top: 4px; }
+    .results { display: none; }
+    .rhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.1rem; }
+    .rtitle { font-family: 'Noto Serif KR', serif; font-size: 1.1rem; font-weight: 700; }
+    .rcnt { font-size: 0.76rem; background: var(--surface2); padding: 3px 11px; border-radius: 20px; color: var(--text2); }
+    .analysis-box { background: var(--accent-light); border: 1px solid #95D5B2; border-radius: var(--r); padding: 1rem 1.2rem; margin-bottom: 1.1rem; }
+    .analysis-box h4 { font-size: 0.78rem; color: var(--accent); font-weight: 600; margin-bottom: 0.45rem; }
+    .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    .tag { font-size: 0.73rem; padding: 3px 9px; border-radius: 20px; font-weight: 500; }
+    .t1 { background: #DBEAFE; color: #1E3A8A; }
+    .t2 { background: #FEF3C7; color: #78350F; }
+    .t3 { background: #EDE9FE; color: #4C1D95; }
+    .t4 { background: #F3F4F6; color: #374151; }
+    .t5 { background: #FCE7F3; color: #831843; }
+    .pcards { display: flex; flex-direction: column; gap: 1rem; }
+    .pcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s; }
+    .pcard:hover { border-color: var(--accent2); box-shadow: 0 3px 14px rgba(27,67,50,0.09); transform: translateY(-1px); }
+    .ptop { display: flex; align-items: flex-start; gap: 11px; padding: 1.1rem 1.2rem 0.9rem; }
+    .pnum { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.76rem; font-weight: 700; flex-shrink: 0; }
+    .pinfo { flex: 1; }
+    .pexam { font-size: 0.87rem; font-weight: 500; }
+    .pmeta { font-size: 0.73rem; color: var(--text3); margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .pmeta-tag { background: var(--surface2); padding: 1px 7px; border-radius: 20px; }
+    .sbadge { font-size: 0.7rem; padding: 2px 9px; border-radius: 20px; font-weight: 500; white-space: nowrap; }
+    .sh { background: #DCFCE7; color: #14532D; }
+    .sm { background: #FEF9C3; color: #713F12; }
+    .sl { background: #F3F4F6; color: #374151; }
+    .pimg-wrap { padding: 0 1.2rem 1.1rem; }
+    .pimg-wrap img { width: 100%; border-radius: var(--r); border: 1px solid var(--border); object-fit: contain; max-height: 260px; cursor: zoom-in; display: block; }
+    .pimg-loading { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text3); }
+    .pfooter { padding: 0.65rem 1.2rem; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+    .sbar-wrap { display: flex; align-items: center; gap: 7px; font-size: 0.73rem; color: var(--text3); }
+    .sbar { width: 66px; height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .sfill { height: 100%; background: var(--accent2); border-radius: 3px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 1000; align-items: center; justify-content: center; padding: 1rem; cursor: zoom-out; }
+    .modal.open { display: flex; }
+    .modal img { max-width: min(90vw,900px); max-height: 90vh; border-radius: var(--r); object-fit: contain; }
+    .modal-x { position: absolute; top: 1rem; right: 1rem; background: white; border: none; border-radius: 50%; width: 34px; height: 34px; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    @media (max-width: 580px) { .filter-grid { grid-template-columns: 1fr; } main { padding: 1.2rem 1rem 4rem; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-dot"></span>수학 유사문제 추천</div>
+  <span class="hbadge">유형별·난이도별 분류 DB</span>
+</header>
+
+<div class="hero">
+  <h1>틀린 문제 사진을 올리면<br>같은 유형의 기출문제를 찾아드립니다</h1>
+  <p>유형별·난이도별로 분류된 기출 DB에서 풀이방법이 비슷한 문제를 추천해요</p>
+</div>
+
+<main>
+
+  <!-- DB 로드 -->
+  <div class="card">
+    <div class="slabel">📦 문제 데이터베이스 로드</div>
+    <p style="font-size:0.83rem;color:var(--text2);margin-bottom:0.9rem;">
+      처음 접속 시 ZIP 파일을 불러옵니다. 약 <strong>30초~1분</strong> 소요될 수 있어요.
+    </p>
+    <button class="btn btn-sm" id="loadDbBtn" onclick="loadDB()">
+      <span class="spin" id="dbSpin"></span>
+      <span id="dbBtnText">🗂 문제 DB 불러오기</span>
+    </button>
+    <div class="db-progress-wrap" id="dbProgressWrap">
+      <div class="db-bar"><div class="db-fill" id="dbFill"></div></div>
+      <div class="db-status" id="dbStatus">준비 중...</div>
+    </div>
+  </div>
+
+  <!-- 문제 사진 업로드 -->
+  <div class="card">
+    <div class="slabel">📸 틀린 문제 사진 업로드</div>
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept="image/*" onchange="onFile(event)">
+      <div class="upload-icon">📷</div>
+      <h3>문제 사진을 여기에 올려주세요</h3>
+      <p>클릭하거나 드래그 · JPG, PNG 지원</p>
+    </div>
+    <div class="preview-wrap" id="previewWrap">
+      <img id="previewImg" src="" alt="미리보기">
+      <div class="preview-name" id="previewName"></div>
+      <button class="change-btn" onclick="resetUpload()">다른 사진으로 변경</button>
+    </div>
+  </div>
+
+  <!-- 검색 필터 -->
+  <div class="card">
+    <div class="slabel">🔍 검색 조건 (선택사항)</div>
+    <div class="filter-grid">
+      <select id="fGrade">
+        <option value="">학년 전체</option>
+        <option value="고1">고1</option>
+        <option value="고2">고2</option>
+        <option value="고3">고3</option>
+      </select>
+      <select id="fDiff">
+        <option value="">난이도 전체</option>
+        <option value="1_하">하</option>
+        <option value="2_중하">중하</option>
+        <option value="3_중">중</option>
+        <option value="4_중상">중상</option>
+        <option value="5_상">상</option>
+      </select>
+      <select id="fCount">
+        <option value="8">8개 추천</option>
+        <option value="12">12개 추천</option>
+        <option value="16">16개 추천</option>
+      </select>
+    </div>
+    <button class="btn" id="searchBtn" onclick="search()">
+      <span class="spin" id="searchSpin"></span>
+      <span id="searchBtnText">유사 문제 찾기</span>
+    </button>
+    <div class="err" id="errBox"></div>
+  </div>
+
+  <!-- 로딩 -->
+  <div class="loading" id="loading">
+    <div class="lspin"></div>
+    <p>AI가 문제를 분석하고 있습니다...</p>
+    <p class="lstep" id="lstep">이미지 분석 중</p>
+  </div>
+
+  <!-- 결과 -->
+  <div class="results" id="results">
+    <div class="rhead">
+      <div class="rtitle">유사 기출 문제 추천</div>
+      <div class="rcnt" id="rcnt"></div>
+    </div>
+    <div class="analysis-box" id="abox"></div>
+    <div class="pcards" id="pcards"></div>
+  </div>
+
+</main>
+
+<div class="modal" id="modal" onclick="closeModal()">
+  <button class="modal-x" onclick="closeModal()">✕</button>
+  <img id="modalImg" src="" alt="">
+</div>
+
+<script>
+// ================================================================
+// ✅ 설정 (Private 레포이므로 안전합니다)
+// ================================================================
+const GEMINI_API_KEY = "여기에_GEMINI_API_키_입력";
+const GEMINI_MODEL  = "gemini-3-flash-preview";
+const ZIP_FILES = [
+  "./수학문제_고1.zip",
+  "./수학문제_고2.zip",
+  "./수학문제_고3.zip",
+];
+// ================================================================
+
+let db = [];        // [{grade, category, categoryNum, diffLevel, diffName, year, month, examName, imagePath}]
+let zipCache = null;
+let uploadedB64 = null;
+
+// ────────────────────────────────────────────────────────────────
+// 파일명/폴더명 파싱
+// ────────────────────────────────────────────────────────────────
+// 경로 예: classified/고1/08_종합_고난도/5_상/2024년_03월_고1수학_학평_q21.png
+function parsePath(path) {
+  const parts = path.replace('classified/', '').split('/');
+  if (parts.length < 4) return null;
+
+  const grade    = parts[0]; // 고1 / 고2 / 고3
+  const catRaw   = parts[1]; // 08_종합_고난도
+  const diffRaw  = parts[2]; // 5_상
+  const filename = parts[3]; // 2024년_03월_고1수학_학평_q21.png
+
+  // 카테고리 번호 + 이름
+  const catMatch = catRaw.match(/^(\d+)_(.+)$/);
+  const categoryNum  = catMatch ? parseInt(catMatch[1]) : 0;
+  const categoryName = catMatch ? catMatch[2].replace(/_/g, ' ') : catRaw;
+
+  // 난이도
+  const diffMatch = diffRaw.match(/^(\d+)_(.+)$/);
+  const diffLevel = diffMatch ? parseInt(diffMatch[1]) : 0;
+  const diffName  = diffMatch ? diffMatch[2] : diffRaw;
+
+  // 파일명 파싱: 2024년_03월_고1수학_학평_q21.png
+  const fnMatch = filename.match(/(\d{4})년_(\d{2})월_(.+?)_(학평|모평|수능|학력평가)_q(\d+)/);
+  const year     = fnMatch ? parseInt(fnMatch[1]) : 0;
+  const month    = fnMatch ? parseInt(fnMatch[2]) : 0;
+  const examName = fnMatch ? `${fnMatch[1]}년 ${fnMatch[2]}월 ${fnMatch[4]}` : filename;
+  const qNum     = fnMatch ? parseInt(fnMatch[5]) : 0;
+
+  return { grade, categoryNum, categoryName, diffLevel, diffName, year, month, examName, qNum, imagePath: path };
+}
+
+// ────────────────────────────────────────────────────────────────
+// DB 로드
+// ────────────────────────────────────────────────────────────────
+async function loadDB() {
+  document.getElementById('loadDbBtn').disabled = true;
+  document.getElementById('dbSpin').style.display = 'block';
+  document.getElementById('dbBtnText').textContent = '로드 중...';
+  document.getElementById('dbProgressWrap').style.display = 'block';
+  setDbStatus('ZIP 파일 다운로드 중...');
+  setDbFill(10);
+
+  try {
+    const res = await fetch(ZIP_FILE);
+    if (!res.ok) throw new Error(`ZIP 파일을 찾을 수 없습니다 (${res.status}). 파일명을 확인해주세요.`);
+    setDbFill(40); setDbStatus('압축 해제 중...');
+    const buf = await res.arrayBuffer();
+    setDbFill(60); setDbStatus('문제 목록 인덱싱 중...');
+    zipCache = await JSZip.loadAsync(buf);
+
+    db = [];
+    zipCache.forEach((path, file) => {
+      if (!path.endsWith('.png') || file.dir) return;
+      const parsed = parsePath(path);
+      if (parsed) db.push(parsed);
+    });
+
+    setDbFill(100);
+    setDbStatus(`<span class="db-ok">✅ ${db.length.toLocaleString()}개 문제 로드 완료!</span>`);
+    document.getElementById('dbSpin').style.display = 'none';
+    document.getElementById('dbBtnText').textContent = '✅ 로드 완료';
+  } catch (e) {
+    setDbStatus(`❌ ${e.message}`);
+    document.getElementById('dbSpin').style.display = 'none';
+    document.getElementById('dbBtnText').textContent = '다시 시도';
+    document.getElementById('loadDbBtn').disabled = false;
+  }
+}
+
+function setDbFill(p) { document.getElementById('dbFill').style.width = p + '%'; }
+function setDbStatus(h) { document.getElementById('dbStatus').innerHTML = h; }
+
+// ────────────────────────────────────────────────────────────────
+// 파일 업로드
+// ────────────────────────────────────────────────────────────────
+function onFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    uploadedB64 = ev.target.result.split(',')[1];
+    document.getElementById('previewImg').src = ev.target.result;
+    document.getElementById('previewName').textContent = file.name;
+    document.getElementById('uploadZone').style.display = 'none';
+    document.getElementById('previewWrap').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+function resetUpload() {
+  uploadedB64 = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('uploadZone').style.display = 'block';
+  document.getElementById('previewWrap').style.display = 'none';
+}
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f?.type.startsWith('image/')) onFile({ target: { files: [f] } });
+});
+
+// ────────────────────────────────────────────────────────────────
+// Gemini API
+// ────────────────────────────────────────────────────────────────
+async function callGemini(prompt, b64 = null) {
+  const parts = [];
+  if (b64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: b64 } });
+  parts.push({ text: prompt });
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 }
+      })
+    }
+  );
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `HTTP ${res.status}`); }
+  const data = await res.json();
+  // thinking 모델은 parts가 여러 개일 수 있어서 text 타입만 추출
+  const textPart = data.candidates?.[0]?.content?.parts?.find(p => p.text);
+  if (!textPart) throw new Error('AI 응답을 읽을 수 없습니다.');
+  return textPart.text.trim();
+}
+
+// ────────────────────────────────────────────────────────────────
+// 유사도 계산 (폴더 구조 기반 — 매우 정확)
+// ────────────────────────────────────────────────────────────────
+function calcSim(analysis, p) {
+  let s = 0;
+
+  // 1. 카테고리 번호 정확히 일치 (50점) — 핵심
+  if (analysis.categoryNum && p.categoryNum === analysis.categoryNum) s += 50;
+  // 카테고리 이름 부분 일치 (25점)
+  else if (analysis.categoryName && p.categoryName) {
+    const aWords = analysis.categoryName.split(' ');
+    const pWords = p.categoryName.split(' ');
+    const common = aWords.filter(w => w.length > 1 && pWords.some(pw => pw.includes(w) || w.includes(pw)));
+    s += Math.min(common.length * 12, 25);
+  }
+
+  // 2. 난이도 일치 (20점)
+  if (analysis.diffLevel && p.diffLevel === analysis.diffLevel) s += 20;
+  else if (analysis.diffLevel && Math.abs(p.diffLevel - analysis.diffLevel) === 1) s += 10;
+
+  // 3. 학년 일치 (15점)
+  if (analysis.grade && p.grade === analysis.grade) s += 15;
+
+  // 4. 키워드 매칭 (15점)
+  const pText = p.categoryName + ' ' + p.examName;
+  (analysis.keywords || []).forEach(k => {
+    if (pText.includes(k)) s += 3;
+  });
+
+  return Math.min(Math.round(s), 99);
+}
+
+// ────────────────────────────────────────────────────────────────
+// 메인 검색
+// ────────────────────────────────────────────────────────────────
+async function search() {
+  if (!uploadedB64) { showErr('문제 사진을 먼저 올려주세요.'); return; }
+  if (db.length === 0) { showErr('문제 DB를 먼저 불러와주세요.'); return; }
+  if (GEMINI_API_KEY === '여기에_GEMINI_API_키_입력') { showErr('index.html의 GEMINI_API_KEY를 실제 키로 바꿔주세요.'); return; }
+
+  setSearchLoading(true); hideErr();
+  document.getElementById('results').style.display = 'none';
+
+  try {
+    // 1. Gemini로 이미지 분석
+    setStep('AI가 문제 유형과 풀이방법 분석 중...');
+    const raw = await callGemini(`당신은 대한민국 수능 수학 전문가입니다.
+이 수학 문제 이미지를 분석하고, 반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이:
+
+{
+  "grade": "고1 또는 고2 또는 고3",
+  "categoryNum": 카테고리번호(정수),
+  "categoryName": "카테고리명",
+  "diffLevel": 난이도숫자(1~5 정수),
+  "diffName": "하 또는 중하 또는 중 또는 중상 또는 상",
+  "topic": "대단원명",
+  "subtopic": "소단원명",
+  "solution_method": "핵심 풀이방법 (예: 치환적분, 이차방정식 판별식, 코사인법칙 등)",
+  "solution_steps": ["풀이과정1", "풀이과정2", "풀이과정3"],
+  "required_concepts": ["필요개념1", "필요개념2", "필요개념3"],
+  "keywords": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"],
+  "summary": "문제 핵심 1문장"
+}
+
+카테고리 번호 기준:
+고1: 01=수와식계산, 02=방정식부등식, 03=함수그래프, 04=도형기하, 05=확률통계, 06=도형기하심화, 07=함수그래프심화, 08=종합고난도, 09=단답형기본, 10=단답형심화, 11=단답형최고난도
+고2: 01=수와식계산, 02=방정식부등식, 03=함수그래프, 04=집합논리, 05=도형좌표기하, 06=행렬수열, 07=함수심화, 08=종합고난도, 09=단답형기본, 10=단답형심화, 11=단답형최고난도
+고3: 01=경우의수순열조합 또는 수열극한 또는 수열지수로그 또는 이차곡선, 02=미분기본 또는 평면벡터 또는 함수극한 또는 확률기본, 03=공간도형좌표 또는 미적분기본 또는 적분기본 또는 확률분포, 04~10=심화/고난도`, uploadedB64);
+
+    // JSON 안전 파싱
+    let analysis;
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error();
+      analysis = JSON.parse(jsonMatch[0]);
+    } catch {
+      analysis = { grade: '', categoryNum: 0, categoryName: '', diffLevel: 3, diffName: '중', topic: '', subtopic: '', solution_method: '', solution_steps: [], required_concepts: [], keywords: [], summary: '분석 실패 — 기본값으로 검색합니다' };
+    }
+
+    // 2. 필터 적용
+    setStep('유사 문제 검색 중...');
+    const fg    = document.getElementById('fGrade').value;
+    const fd    = document.getElementById('fDiff').value;
+    const count = parseInt(document.getElementById('fCount').value);
+
+    // AI가 분석한 학년/난이도도 반영
+    const gradeFilter = fg || analysis.grade || '';
+    const diffFilter  = fd;
+
+    let pool = db.filter(p =>
+      (!gradeFilter || p.grade === gradeFilter) &&
+      (!diffFilter  || p.diffLevel === parseInt(diffFilter.split('_')[0]))
+    );
+
+    // 3. 유사도 계산 및 정렬
+    const scored = pool
+      .map(p => ({ ...p, similarity: calcSim(analysis, p) }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, count);
+
+    renderResults(analysis, scored);
+
+  } catch (e) {
+    showErr('오류: ' + e.message);
+  } finally {
+    setSearchLoading(false);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// 결과 렌더링
+// ────────────────────────────────────────────────────────────────
+function renderResults(analysis, problems) {
+  document.getElementById('rcnt').textContent = `${problems.length}개 추천`;
+
+  document.getElementById('abox').innerHTML = `
+    <h4>📊 업로드한 문제 분석</h4>
+    <div class="tags">
+      ${analysis.grade ? `<span class="tag t1">${analysis.grade}</span>` : ''}
+      ${analysis.topic ? `<span class="tag t1">${analysis.topic}</span>` : ''}
+      ${analysis.subtopic ? `<span class="tag t1">${analysis.subtopic}</span>` : ''}
+      ${analysis.diffName ? `<span class="tag t2">난이도: ${analysis.diffName}</span>` : ''}
+      ${analysis.categoryName ? `<span class="tag t3">유형: ${analysis.categoryName}</span>` : ''}
+    </div>
+    ${analysis.solution_method ? `<div style="margin-top:8px;font-size:0.82rem;"><strong style="color:var(--accent)">🔧 풀이방법:</strong> ${analysis.solution_method}</div>` : ''}
+    ${(analysis.solution_steps||[]).length ? `<div style="margin-top:5px;font-size:0.79rem;color:var(--text2)"><strong>풀이과정:</strong> ${analysis.solution_steps.join(' → ')}</div>` : ''}
+    ${(analysis.required_concepts||[]).length ? `<div style="margin-top:6px;" class="tags">${analysis.required_concepts.map(c=>`<span class="tag t5">${c}</span>`).join('')}</div>` : ''}
+    <p style="font-size:0.79rem;color:var(--text2);margin-top:7px;">${analysis.summary}</p>`;
+
+  const container = document.getElementById('pcards');
+  container.innerHTML = '';
+
+  problems.forEach((p, i) => {
+    const sc = p.similarity >= 65 ? 'sh' : p.similarity >= 40 ? 'sm' : 'sl';
+    const sl = p.similarity >= 65 ? '유사' : p.similarity >= 40 ? '관련' : '참고';
+
+    const card = document.createElement('div');
+    card.className = 'pcard';
+    card.innerHTML = `
+      <div class="ptop">
+        <div class="pnum">${i+1}</div>
+        <div class="pinfo">
+          <div class="pexam">${p.examName} ${p.qNum ? p.qNum+'번' : ''}</div>
+          <div class="pmeta">
+            <span class="pmeta-tag">${p.grade}</span>
+            <span class="pmeta-tag">${p.categoryName}</span>
+            <span class="pmeta-tag">난이도: ${p.diffName}</span>
+          </div>
+        </div>
+        <span class="sbadge ${sc}">${sl} ${p.similarity}%</span>
+      </div>
+      <div class="pimg-wrap" id="imgwrap-${i}">
+        <div class="pimg-loading">이미지 불러오는 중...</div>
+      </div>
+      <div class="pfooter">
+        <div class="sbar-wrap">
+          <span>유사도</span>
+          <div class="sbar"><div class="sfill" style="width:${p.similarity}%"></div></div>
+          <span>${p.similarity}%</span>
+        </div>
+        <span style="font-size:0.72rem;color:var(--text3)">${p.year}년 ${p.month}월</span>
+      </div>`;
+    container.appendChild(card);
+    loadImage(p, i);
+  });
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ────────────────────────────────────────────────────────────────
+// ZIP에서 이미지 로드
+// ────────────────────────────────────────────────────────────────
+async function loadImage(p, idx) {
+  const wrap = document.getElementById(`imgwrap-${idx}`);
+  if (!wrap || !zipCache) return;
+  try {
+    const file = zipCache.file(p.imagePath);
+    if (!file) throw new Error();
+    const blob = await file.async('blob');
+    const url = URL.createObjectURL(blob);
+    wrap.innerHTML = `<img src="${url}" alt="${p.examName}" onclick="openModal('${url}')" loading="lazy">`;
+  } catch {
+    wrap.innerHTML = `<div class="pimg-loading">이미지를 불러올 수 없습니다</div>`;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// 유틸
+// ────────────────────────────────────────────────────────────────
+function setSearchLoading(on) {
+  document.getElementById('loading').style.display = on ? 'block' : 'none';
+  document.getElementById('searchSpin').style.display = on ? 'block' : 'none';
+  document.getElementById('searchBtnText').textContent = on ? '분석 중...' : '유사 문제 찾기';
+  document.getElementById('searchBtn').disabled = on;
+}
+function setStep(t) { document.getElementById('lstep').textContent = t; }
+function showErr(m) { const b=document.getElementById('errBox'); b.textContent='⚠ '+m; b.style.display='block'; }
+function hideErr() { document.getElementById('errBox').style.display='none'; }
+function openModal(src) { document.getElementById('modalImg').src=src; document.getElementById('modal').classList.add('open'); }
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+</script>
+</body>
+</html>
