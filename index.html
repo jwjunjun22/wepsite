@@ -213,7 +213,7 @@ let uploadedB64 = null;
 // ────────────────────────────────────────────────────────────────
 // 경로 예: classified/고1/08_종합_고난도/5_상/2024년_03월_고1수학_학평_q21.png
 function parsePath(path) {
-  const parts = path.replace('classified/', '').split('/');
+  const parts = path.split('/');
   if (parts.length < 4) return null;
 
   const grade    = parts[0]; // 고1 / 고2 / 고3
