@@ -83,7 +83,7 @@
     .pimg-wrap { padding: 0 1.2rem 1.1rem; }
     .pimg-wrap img { width: 100%; border-radius: var(--r); border: 1px solid var(--border); object-fit: contain; max-height: 260px; cursor: zoom-in; display: block; }
     .pimg-loading { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text3); }
-    .pfooter { padding: 0.65rem 1.2rem; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+    .pimg-footer { padding: 0.65rem 1.2rem; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
     .sbar-wrap { display: flex; align-items: center; gap: 7px; font-size: 0.73rem; color: var(--text3); }
     .sbar { width: 66px; height: 4px; background: var(--border); border-radius: 3px; overflow: hidden; }
     .sfill { height: 100%; background: var(--accent2); border-radius: 3px; }
@@ -200,21 +200,19 @@ let db = [];
 let zipCache = {};
 let uploadedB64 = null;
 
-// 경로 파싱 함수 (사용자가 묶어둔 실제 폴더/단원 이름 원본 유지)
 function parsePath(path, zipName) {
   const parts = path.split("/");
   if (parts.length < 3) return null;
 
-  const catRaw   = parts[0]; // 예: "01_지수와_로그"
-  const diffRaw  = parts[1]; // 예: "3_중"
-  const filename = parts[2]; // 예: "2026년_03월_고1수학_학평_q02.png"
+  const catRaw   = parts[0];
+  const diffRaw  = parts[1];
+  const filename = parts[2];
 
   const gradeM = zipName.match(/(고\d)/);
   const grade  = gradeM ? gradeM[1] : "";
 
   const catM = catRaw.match(/^(\d+)_(.+)$/);
   const categoryNum  = catM ? parseInt(catM[1]) : 0;
-  // 검색 정확도를 위해 폴더명 원본(예: "01_지수와_로그")과 공백제거본을 다 들고 있도록 설계
   const categoryName = catM ? catM[2].replace(/_/g, " ") : catRaw;
 
   const diffM = diffRaw.match(/^(\d+)_(.+)$/);
@@ -231,7 +229,7 @@ function parsePath(path, zipName) {
     grade, 
     categoryNum, 
     categoryName, 
-    categoryRaw: catRaw, // 원본 폴더 이름 저장 (중요)
+    categoryRaw: catRaw,
     diffLevel, 
     diffName, 
     year, 
@@ -242,7 +240,6 @@ function parsePath(path, zipName) {
   };
 }
 
-// DB 로드
 async function loadDB() {
   document.getElementById("loadDbBtn").disabled = true;
   document.getElementById("dbSpin").style.display = "block";
@@ -285,7 +282,6 @@ async function loadDB() {
 function setDbFill(p) { document.getElementById("dbFill").style.width = p + "%"; }
 function setDbStatus(h) { document.getElementById("dbStatus").innerHTML = h; }
 
-// 파일 업로드
 function onFile(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -308,15 +304,16 @@ function resetUpload() {
 }
 
 const zone = document.getElementById("uploadZone");
-zone.addEventListener("dragover", function(e) { e.preventDefault(); zone.classList.add("drag"); });
-zone.addEventListener("dragleave", function() { zone.classList.remove("drag"); });
-zone.addEventListener("drop", function(e) {
-  e.preventDefault(); zone.classList.remove("drag");
-  const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith("image/")) onFile({ target: { files: [f] } });
-});
+if(zone) {
+  zone.addEventListener("dragover", function(e) { e.preventDefault(); zone.classList.add("drag"); });
+  zone.addEventListener("dragleave", function() { zone.classList.remove("drag"); });
+  zone.addEventListener("drop", function(e) {
+    e.preventDefault(); zone.classList.remove("drag");
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith("image/")) onFile({ target: { files: [f] } });
+  });
+}
 
-// Gemini API 호출
 async function callGemini(prompt, b64) {
   const parts = [];
   if (b64) parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
@@ -328,7 +325,7 @@ async function callGemini(prompt, b64) {
     type: "OBJECT",
     properties: {
       grade: { type: "STRING" },
-      matchedFolder: { type: "STRING" }, // 실제 매칭된 폴더명 원본 저장용 추가
+      matchedFolder: { type: "STRING" }, 
       diffLevel: { type: "INTEGER" },
       diffName: { type: "STRING" },
       topic: { type: "STRING" },
@@ -366,15 +363,12 @@ async function callGemini(prompt, b64) {
   return textPart.text.trim();
 }
 
-// 똑똑해진 유사도 알고리즘 (사용자가 묶어둔 폴더 내부 매칭 가중치 극대화)
 function calcSim(analysis, p) {
   let s = 0;
 
-  // 1순위: AI가 골라낸 실제 DB 폴더 이름과 완벽히 일치하는 경우 최고점 부여 (55점)
   if (analysis.matchedFolder && p.categoryRaw === analysis.matchedFolder) {
     s += 65; 
   } else if (analysis.matchedFolder) {
-    // 부분 글자 일치 비교 보정
     const cleanFolder = analysis.matchedFolder.replace(/\d+_/g, "").replace(/_/g, "");
     const cleanDbFolder = p.categoryRaw.replace(/\d+_/g, "").replace(/_/g, "");
     if (cleanDbFolder.includes(cleanFolder) || cleanFolder.includes(cleanDbFolder)) {
@@ -382,14 +376,11 @@ function calcSim(analysis, p) {
     }
   }
   
-  // 2순위: 난이도 일치 (20점)
   if (analysis.diffLevel && p.diffLevel === analysis.diffLevel) s += 20;
   else if (analysis.diffLevel && Math.abs(p.diffLevel - analysis.diffLevel) === 1) s += 10;
   
-  // 3순위: 학년 일치 (10점)
   if (analysis.grade && p.grade === analysis.grade) s += 10;
   
-  // 4순위: 세부 풀이법 키워드 검증 매칭 (5점)
   const pText = p.categoryName + " " + p.examName;
   let keywordHits = 0;
   (analysis.keywords || []).forEach(function(k) { 
@@ -400,7 +391,6 @@ function calcSim(analysis, p) {
   return Math.min(Math.round(s), 99);
 }
 
-// 메인 검색
 async function search() {
   if (!uploadedB64) { showErr("문제 사진을 먼저 올려주세요."); return; }
   if (db.length === 0) { showErr("문제 DB를 먼저 불러와주세요."); return; }
@@ -411,12 +401,9 @@ async function search() {
   try {
     setStep("사용자 데이터베이스의 폴더 분석 중...");
 
-    // 현재 로드된 실제 기출문제 폴더 목록을 동적으로 추출하여 리스트업합니다.
     const folderSet = new Set();
     db.forEach(p => { if(p.categoryRaw) folderSet.add(p.categoryRaw); });
     const dynamicFolderList = Array.from(folderSet).join(", ");
-
-// index.html의 search() 함수 내부 prompt 부분을 아래 내용으로 교체하세요.
 
     const prompt = `당신은 고등학교 수학 기출문제(학평/모평/수능) 분석 전문가입니다.
 업로드된 수학 문제 이미지를 분석하여, 이 문제가 제공된 [실제 데이터베이스 폴더 목록] 중 어느 폴더(단원)에 포함되어야 하는지 가장 정확한 폴더명을 하나 선택하고 분석 결과를 JSON 객체로 반환하세요.
@@ -437,15 +424,6 @@ ${dynamicFolderList}
 1. grade: 반드시 "고1", "고2", "고3" 중 하나로 매칭하세요. (사진이 고1 과정의 방정식/부등식이라면 "고1"로 지정)
 2. matchedFolder: 위의 [실제 데이터베이스 폴더 목록]에 적힌 폴더명과 토씨 하나, 언더바(_) 하나 틀리지 않고 100% 똑같이 반환해야 합니다. (예: "02_방정식부등식"이 목록에 있다면 그대로 적을 것)
 3. diffLevel: 1~5점 사이 난이도.
-4. diffName: 하, 중하, 중, 중상, 상 중 선택.`;.
-
-[실제 데이터베이스 폴더 목록]
-${dynamicFolderList}
-
-[작성 규칙]
-1. grade: 반드시 "고1", "고2", "고3" 중 하나로 매칭하세요.
-2. matchedFolder: 위의 목록에 적힌 글자(예: 01_지수와_로그)와 토씨 하나 틀리지 않고 100% 똑같이 반환해야 합니다. 목록에 알맞은 단원이 없다면 문제 개념과 가장 유사한 폴더명을 추정하여 작성하세요.
-3. diffLevel: 1~5점 사이 난이도.
 4. diffName: 하, 중하, 중, 중상, 상 중 선택.`;
 
     const raw = await callGemini(prompt, uploadedB64);
@@ -464,7 +442,6 @@ ${dynamicFolderList}
     const fd    = document.getElementById("fDiff").value;
     const count = parseInt(document.getElementById("fCount").value);
     
-    // 조건 필터링
     const gradeFilter = fg || analysis.grade || "";
 
     const pool = db.filter(function(p) {
@@ -473,13 +450,11 @@ ${dynamicFolderList}
       return true;
     });
 
-    // 매칭 스코어링 및 슬라이싱
     const scored = pool
       .map(function(p) { return Object.assign({}, p, { similarity: calcSim(analysis, p) }); })
       .sort(function(a, b) { return b.similarity - a.similarity; })
       .slice(0, count);
 
-    // 가짜 필드 호환 레이어
     analysis.categoryName = analysis.matchedFolder ? analysis.matchedFolder.replace(/\d+_/g, "").replace(/_/g, " ") : "수학";
     renderResults(analysis, scored);
 
@@ -490,7 +465,6 @@ ${dynamicFolderList}
   }
 }
 
-// 결과 인터페이스 렌더링
 function renderResults(analysis, problems) {
   document.getElementById("rcnt").textContent = problems.length + "개 추천";
 
@@ -533,7 +507,7 @@ function renderResults(analysis, problems) {
         '<div class="pimg-wrap" id="imgwrap-' + i + '">' +
           '<div class="pimg-loading">ZIP 내 압축 이미지 디코딩 중...</div>' +
         '</div>' +
-        '<div class="pfooter">' +
+        '<div class="pimg-footer">' +
           '<div class="sbar-wrap">' +
             '<span>적합도</span>' +
             '<div class="sbar"><div class="sfill" style="width:' + p.similarity + '%"></div></div>' +
@@ -550,7 +524,6 @@ function renderResults(analysis, problems) {
   document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// 압축 이미지 로드
 async function loadImage(p, idx) {
   const wrap = document.getElementById("imgwrap-" + idx);
   if (!wrap) return;
