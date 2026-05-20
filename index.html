@@ -414,8 +414,14 @@ async function search() {
     let analysis;
     try {
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error();
-      analysis = JSON.parse(jsonMatch[0]);
+      if (!jsonMatch) throw new Error('JSON 없음');
+      // 특수문자 정리
+      const cleaned = jsonMatch[0]
+        .replace(/[\u0000-\u001F\u007F]/g, ' ')  // 제어문자 제거
+        .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')  // 잘못된 이스케이프 수정
+        .replace(/\n/g, ' ')                      // 줄바꿈 제거
+        .replace(/\r/g, ' ');                     // 캐리지리턴 제거
+      analysis = JSON.parse(cleaned);
     } catch (err) {
       console.log('파싱 오류:', err.message);
       console.log('raw 응답:', raw);
