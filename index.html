@@ -367,27 +367,27 @@ function calcSim(analysis, p) {
   let s = 0;
 
   if (analysis.matchedFolder && p.categoryRaw === analysis.matchedFolder) {
-    s += 65; 
+    s += 60; 
   } else if (analysis.matchedFolder) {
     const cleanFolder = analysis.matchedFolder.replace(/\d+_/g, "").replace(/_/g, "");
     const cleanDbFolder = p.categoryRaw.replace(/\d+_/g, "").replace(/_/g, "");
     if (cleanDbFolder.includes(cleanFolder) || cleanFolder.includes(cleanDbFolder)) {
-      s += 45;
+      s += 40;
     }
   }
   
-  if (analysis.diffLevel && p.diffLevel === analysis.diffLevel) s += 20;
-  else if (analysis.diffLevel && Math.abs(p.diffLevel - analysis.diffLevel) === 1) s += 10;
+  if (analysis.diffLevel && p.diffLevel === analysis.diffLevel) s += 15;
+  if (analysis.grade && p.grade === analysis.grade) s += 15;
   
-  if (analysis.grade && p.grade === analysis.grade) s += 10;
+  const fullText = (p.categoryName + " " + p.examName + " " + p.categoryRaw).toLowerCase();
+  let hits = 0;
   
-  const pText = p.categoryName + " " + p.examName;
-  let keywordHits = 0;
-  (analysis.keywords || []).forEach(function(k) { 
-    if (pText.includes(k) || p.categoryRaw.includes(k)) keywordHits++; 
-  });
-  s += Math.min(keywordHits * 3, 5);
-
+  if (fullText.includes("방정식") || fullText.includes("부등식")) hits += 2;
+  if (analysis.keywords) {
+    analysis.keywords.forEach(k => { if(fullText.includes(k.toLowerCase())) hits++; });
+  }
+  
+  s += Math.min(hits * 4, 10);
   return Math.min(Math.round(s), 99);
 }
 
@@ -405,25 +405,19 @@ async function search() {
     db.forEach(p => { if(p.categoryRaw) folderSet.add(p.categoryRaw); });
     const dynamicFolderList = Array.from(folderSet).join(", ");
 
-    const prompt = `당신은 고등학교 수학 기출문제(학평/모평/수능) 분석 전문가입니다.
+    const prompt = `당신은 고등학교 수학 기출문제 분석 전문가입니다.
 업로드된 수학 문제 이미지를 분석하여, 이 문제가 제공된 [실제 데이터베이스 폴더 목록] 중 어느 폴더(단원)에 포함되어야 하는지 가장 정확한 폴더명을 하나 선택하고 분석 결과를 JSON 객체로 반환하세요.
 
 [실제 데이터베이스 폴더 목록]
 ${dynamicFolderList}
 
-[🚨 중요: 단원 판별 가이드라인]
-1. 방정식과 부등식 (예: 02_방정식부등식 또는 이와 유사한 이름):
-   - 문제에 등호(=)나 부등호(<, >, ≤, ≥)가 포함되어 있나요?
-   - 이차방정식, 삼·사차방정식, 연립방정식, 절댓값이 포함된 방정식/부등식, 판별식, 근과 계수의 관계, 나머지 정리 등을 사용하는 문제인가요?
-   - ★사용자가 업로드한 이 문제는 "방정식과 부등식" 단원의 문제입니다. 절대로 '수와식 계산'과 헷갈리지 마세요.
-
-2. 수와식 계산 (예: 01_수와식_계산 또는 이와 유사한 이름):
-   - 다항식의 단순 전개, 인수분해 공식 적용, 조립제법, 복소수(i)의 단순 사칙연산, 무리식/유리식의 단순 계산 등 식의 변형 자체를 묻는 문제에만 지정하세요.
+[🚨 중요 단원 판별 가이드라인]
+- 문제에 등호(=)나 부등호(<, >, ≤, ≥)가 명시되어 있고 x값의 범위나 정수 개수, 실근의 개수를 구하는 문제라면, AI 개인의 주관적 판단(함수적 해석 등)을 배제하고 반드시 목록 중 "방정식" 또는 "부등식" 글자가 들어간 폴더명(예: 02_방정식부등식)을 'matchedFolder'에 선택하세요. 함부로 '함수그래프'를 선택하지 마세요.
 
 [작성 규칙]
-1. grade: 반드시 "고1", "고2", "고3" 중 하나로 매칭하세요. (사진이 고1 과정의 방정식/부등식이라면 "고1"로 지정)
-2. matchedFolder: 위의 [실제 데이터베이스 폴더 목록]에 적힌 폴더명과 토씨 하나, 언더바(_) 하나 틀리지 않고 100% 똑같이 반환해야 합니다. (예: "02_방정식부등식"이 목록에 있다면 그대로 적을 것)
-3. diffLevel: 1~5점 사이 난이도.
+1. grade: "고1", "고2", "고3" 중 하나.
+2. matchedFolder: 위의 목록에 적힌 폴더명과 100% 똑같이 반환.
+3. diffLevel: 1~5 정수.
 4. diffName: 하, 중하, 중, 중상, 상 중 선택.`;
 
     const raw = await callGemini(prompt, uploadedB64);
@@ -435,6 +429,18 @@ ${dynamicFolderList}
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (jsonMatch) analysis = JSON.parse(jsonMatch[0]);
       else throw new Error("JSON 구조 해석 불가");
+    }
+
+    // 🔥 [AI 오지정 강제 교정 보정 필터]
+    const lowerSummary = (analysis.summary || "").toLowerCase() + " " + (analysis.solution_method || "").toLowerCase();
+    if (analysis.matchedFolder && analysis.matchedFolder.includes("함수") && 
+        (lowerSummary.includes("방정식") || lowerSummary.includes("부등식") || lowerSummary.includes("조건") || lowerSummary.includes("정수"))) {
+      
+      const realMatch = Array.from(folderSet).find(f => f.includes("방정식") || f.includes("부등식"));
+      if (realMatch) {
+        console.log("⚠️ AI 폴더 우회 수정: " + analysis.matchedFolder + " -> 강제 매칭: " + realMatch);
+        analysis.matchedFolder = realMatch; 
+      }
     }
 
     setStep("같은 폴더(유형) 내에서 유사도 정렬 중...");
