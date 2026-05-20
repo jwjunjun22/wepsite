@@ -216,12 +216,9 @@ function parsePath(path, zipName) {
   const parts = path.split('/');
   if (parts.length < 3) return null;
 
-  // 구조: 01_수와식_계산/1_하/2026년_03월_고1수학_학평_q01.png
-  const catRaw   = parts[0]; // 01_수와식_계산
-  const diffRaw  = parts[1]; // 1_하
-  const filename = parts[2]; // 2026년_03월_고1수학_학평_q01.png
-
-  // 학년은 ZIP 파일명에서 추출 (고1.zip → 고1)
+  const catRaw   = parts[0];
+  const diffRaw  = parts[1];
+  const filename = parts[2];
   const gradeMatch = zipName.match(/(고\d)/);
   const grade = gradeMatch ? gradeMatch[1] : '';
 
