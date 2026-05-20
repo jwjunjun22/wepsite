@@ -201,11 +201,7 @@
 // ================================================================
 const GEMINI_API_KEY = "여기에_GEMINI_API_키_입력";
 const GEMINI_MODEL  = "gemini-3-flash-preview";
-const ZIP_FILES = [
-  "./수학문제_고1.zip",
-  "./수학문제_고2.zip",
-  "./수학문제_고3.zip",
-];
+const ZIP_FILES     = ["./고1.zip", "./고2.zip", "./고3.zip"];
 // ================================================================
 
 let db = [];        // [{grade, category, categoryNum, diffLevel, diffName, year, month, examName, imagePath}]
@@ -253,34 +249,32 @@ async function loadDB() {
   document.getElementById('dbSpin').style.display = 'block';
   document.getElementById('dbBtnText').textContent = '로드 중...';
   document.getElementById('dbProgressWrap').style.display = 'block';
-  setDbStatus('ZIP 파일 다운로드 중...');
-  setDbFill(10);
+  db = [];
+  zipCache = {};
+  let loaded = 0;
 
-  try {
-    const res = await fetch(ZIP_FILE);
-    if (!res.ok) throw new Error(`ZIP 파일을 찾을 수 없습니다 (${res.status}). 파일명을 확인해주세요.`);
-    setDbFill(40); setDbStatus('압축 해제 중...');
-    const buf = await res.arrayBuffer();
-    setDbFill(60); setDbStatus('문제 목록 인덱싱 중...');
-    zipCache = await JSZip.loadAsync(buf);
-
-    db = [];
-    zipCache.forEach((path, file) => {
-      if (!path.endsWith('.png') || file.dir) return;
-      const parsed = parsePath(path);
-      if (parsed) db.push(parsed);
-    });
-
-    setDbFill(100);
-    setDbStatus(`<span class="db-ok">✅ ${db.length.toLocaleString()}개 문제 로드 완료!</span>`);
-    document.getElementById('dbSpin').style.display = 'none';
-    document.getElementById('dbBtnText').textContent = '✅ 로드 완료';
-  } catch (e) {
-    setDbStatus(`❌ ${e.message}`);
-    document.getElementById('dbSpin').style.display = 'none';
-    document.getElementById('dbBtnText').textContent = '다시 시도';
-    document.getElementById('loadDbBtn').disabled = false;
+  for (const zipName of ZIP_FILES) {
+    setDbStatus(`📥 ${zipName} 불러오는 중... (${loaded + 1}/${ZIP_FILES.length})`);
+    setDbFill(Math.round((loaded / ZIP_FILES.length) * 90));
+    try {
+      const res = await fetch(zipName);
+      if (!res.ok) throw new Error(`${zipName} 없음 (${res.status})`);
+      const buf = await res.arrayBuffer();
+      const zip = await JSZip.loadAsync(buf);
+      zipCache[zipName] = zip;
+      zip.forEach((path, file) => {
+        if (!path.endsWith('.png') || file.dir) return;
+        const parsed = parsePath(path);
+        if (parsed) { parsed.zipName = zipName; db.push(parsed); }
+      });
+    } catch (e) { console.warn(e.message); }
+    loaded++;
   }
+
+  setDbFill(100);
+  setDbStatus(`<span class="db-ok">✅ ${db.length.toLocaleString()}개 문제 로드 완료!</span>`);
+  document.getElementById('dbSpin').style.display = 'none';
+  document.getElementById('dbBtnText').textContent = '✅ 로드 완료';
 }
 
 function setDbFill(p) { document.getElementById('dbFill').style.width = p + '%'; }
@@ -521,8 +515,10 @@ async function loadImage(p, idx) {
   const wrap = document.getElementById(`imgwrap-${idx}`);
   if (!wrap || !zipCache) return;
   try {
-    const file = zipCache.file(p.imagePath);
-    if (!file) throw new Error();
+    const zip = zipCache[p.zipName];
+    if (!zip) throw new Error('ZIP 없음');
+    const file = zip.file(p.imagePath);
+    if (!file) throw new Error('파일 없음');
     const blob = await file.async('blob');
     const url = URL.createObjectURL(blob);
     wrap.innerHTML = `<img src="${url}" alt="${p.examName}" onclick="openModal('${url}')" loading="lazy">`;
