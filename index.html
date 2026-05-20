@@ -212,16 +212,20 @@ let uploadedB64 = null;
 // 파일명/폴더명 파싱
 // ────────────────────────────────────────────────────────────────
 // 경로 예: classified/고1/08_종합_고난도/5_상/2024년_03월_고1수학_학평_q21.png
-function parsePath(path) {
+function parsePath(path, zipName) {
   const parts = path.split('/');
-  if (parts.length < 4) return null;
+  if (parts.length < 3) return null;
 
-  const grade    = parts[0]; // 고1 / 고2 / 고3
-  const catRaw   = parts[1]; // 08_종합_고난도
-  const diffRaw  = parts[2]; // 5_상
-  const filename = parts[3]; // 2024년_03월_고1수학_학평_q21.png
+  // 구조: 01_수와식_계산/1_하/2026년_03월_고1수학_학평_q01.png
+  const catRaw   = parts[0]; // 01_수와식_계산
+  const diffRaw  = parts[1]; // 1_하
+  const filename = parts[2]; // 2026년_03월_고1수학_학평_q01.png
 
-  // 카테고리 번호 + 이름
+  // 학년은 ZIP 파일명에서 추출 (고1.zip → 고1)
+  const gradeMatch = zipName.match(/(고\d)/);
+  const grade = gradeMatch ? gradeMatch[1] : '';
+
+  // 카테고리
   const catMatch = catRaw.match(/^(\d+)_(.+)$/);
   const categoryNum  = catMatch ? parseInt(catMatch[1]) : 0;
   const categoryName = catMatch ? catMatch[2].replace(/_/g, ' ') : catRaw;
@@ -231,12 +235,12 @@ function parsePath(path) {
   const diffLevel = diffMatch ? parseInt(diffMatch[1]) : 0;
   const diffName  = diffMatch ? diffMatch[2] : diffRaw;
 
-  // 파일명 파싱: 2024년_03월_고1수학_학평_q21.png
-  const fnMatch = filename.match(/(\d{4})년_(\d{2})월_(.+?)_(학평|모평|수능|학력평가)_q(\d+)/);
+  // 파일명 파싱
+  const fnMatch = filename.match(/(\d{4})년_(\d{2})월_.+?_(학평|모평|수능|학력평가)_q(\d+)/);
   const year     = fnMatch ? parseInt(fnMatch[1]) : 0;
   const month    = fnMatch ? parseInt(fnMatch[2]) : 0;
-  const examName = fnMatch ? `${fnMatch[1]}년 ${fnMatch[2]}월 ${fnMatch[4]}` : filename;
-  const qNum     = fnMatch ? parseInt(fnMatch[5]) : 0;
+  const examName = fnMatch ? `${fnMatch[1]}년 ${fnMatch[2]}월 ${fnMatch[3]}` : filename;
+  const qNum     = fnMatch ? parseInt(fnMatch[4]) : 0;
 
   return { grade, categoryNum, categoryName, diffLevel, diffName, year, month, examName, qNum, imagePath: path };
 }
@@ -264,7 +268,7 @@ async function loadDB() {
       zipCache[zipName] = zip;
       zip.forEach((path, file) => {
         if (!path.endsWith('.png') || file.dir) return;
-        const parsed = parsePath(path);
+        const parsed = parsePath(path, zipName);
         if (parsed) { parsed.zipName = zipName; db.push(parsed); }
       });
     } catch (e) { console.warn(e.message); }
