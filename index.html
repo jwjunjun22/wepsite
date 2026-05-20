@@ -6,6 +6,7 @@
   <title>수학 유사문제 추천</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="./apikey.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -191,7 +192,7 @@
 </div>
 
 <script>
-const GEMINI_API_KEY = "AIzaSyBn6jvezeo6Sgf_yAs4Q6WhvfcuZi6WGTg";
+// ⚠️ API 키 변수가 제거되었습니다. 로컬의 apikey.js에서 GEMINI_API_KEY를 주입받습니다.
 const GEMINI_MODEL   = "gemini-2.5-flash";
 const GEMINI_VER     = "v1beta";
 const ZIP_FILES      = ["./고1.zip", "./고2.zip", "./고3.zip"];
@@ -315,6 +316,11 @@ if(zone) {
 }
 
 async function callGemini(prompt, b64) {
+  // 키 유효성 체크
+  if (typeof GEMINI_API_KEY === "undefined" || !GEMINI_API_KEY) {
+    throw new Error("apikey.js 파일이 없거나 API 키가 설정되지 않았습니다.");
+  }
+
   const parts = [];
   if (b64) parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
   parts.push({ text: prompt });
