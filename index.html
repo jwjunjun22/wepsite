@@ -330,7 +330,7 @@ async function callGemini(prompt, b64 = null) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 3000 }      })
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 })
     }
   );
   if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `HTTP ${res.status}`); }
@@ -363,7 +363,8 @@ function calcSim(analysis, p) {
 
   // 3. 학년 일치 (15점)
   if (analysis.grade && p.grade === analysis.grade) s += 15;
-
+  // grade 없어도 categoryNum으로만 매칭
+  if (!analysis.grade && p.categoryNum === analysis.categoryNum) s += 10;
   // 4. 키워드 매칭 (15점)
   const pText = p.categoryName + ' ' + p.examName;
   (analysis.keywords || []).forEach(k => {
@@ -402,7 +403,7 @@ async function search() {
   "solution_steps": ["풀이과정1", "풀이과정2", "풀이과정3"],
   "required_concepts": ["필요개념1", "필요개념2", "필요개념3"],
   "keywords": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"],
-  "summary": "문제 핵심 1문장"
+  "summary": "문제핵심"
 }
 
 카테고리 번호 기준:
