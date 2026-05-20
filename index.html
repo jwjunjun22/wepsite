@@ -108,7 +108,6 @@
 
 <main>
 
-  <!-- DB 로드 -->
   <div class="card">
     <div class="slabel">📦 문제 데이터베이스 로드</div>
     <p style="font-size:0.83rem;color:var(--text2);margin-bottom:0.9rem;">
@@ -124,7 +123,6 @@
     </div>
   </div>
 
-  <!-- 문제 사진 업로드 -->
   <div class="card">
     <div class="slabel">📸 틀린 문제 사진 업로드</div>
     <div class="upload-zone" id="uploadZone">
@@ -140,7 +138,6 @@
     </div>
   </div>
 
-  <!-- 검색 필터 -->
   <div class="card">
     <div class="slabel">🔍 검색 조건 (선택사항)</div>
     <div class="filter-grid">
@@ -152,11 +149,11 @@
       </select>
       <select id="fDiff">
         <option value="">난이도 전체</option>
-        <option value="1_하">하</option>
-        <option value="2_중하">중하</option>
-        <option value="3_중">중</option>
-        <option value="4_중상">중상</option>
-        <option value="5_상">상</option>
+        <option value="1">하</option>
+        <option value="2">중하</option>
+        <option value="3">중</option>
+        <option value="4">중상</option>
+        <option value="5">상</option>
       </select>
       <select id="fCount">
         <option value="8">8개 추천</option>
@@ -171,14 +168,12 @@
     <div class="err" id="errBox"></div>
   </div>
 
-  <!-- 로딩 -->
   <div class="loading" id="loading">
     <div class="lspin"></div>
     <p>AI가 문제를 분석하고 있습니다...</p>
     <p class="lstep" id="lstep">이미지 분석 중</p>
   </div>
 
-  <!-- 결과 -->
   <div class="results" id="results">
     <div class="rhead">
       <div class="rtitle">유사 기출 문제 추천</div>
@@ -196,360 +191,294 @@
 </div>
 
 <script>
-// ================================================================
-// ✅ 설정 (Private 레포이므로 안전합니다)
-// ================================================================
-const GEMINI_API_KEY = "AIzaSyDkAXcewV7fW_jK7qgjvCpELMEKFm5A3JU";
-const GEMINI_MODEL  = "gemini-3-flash-preview";
-const ZIP_FILES     = ["./고1.zip", "./고2.zip", "./고3.zip"];
-// ================================================================
+const GEMINI_API_KEY = "AIzaSyDjXi-WQ_3hyvNs_YV23ETkrfZPsVWWBI8";
+const GEMINI_MODEL   = "gemini-3-flash-preview";
+const GEMINI_VER     = "v1beta";
+const ZIP_FILES      = ["./고1.zip", "./고2.zip", "./고3.zip"];
 
-let db = [];        // [{grade, category, categoryNum, diffLevel, diffName, year, month, examName, imagePath}]
-let zipCache = null;
+let db = [];
+let zipCache = {};
 let uploadedB64 = null;
 
-// ────────────────────────────────────────────────────────────────
-// 파일명/폴더명 파싱
-// ────────────────────────────────────────────────────────────────
-// 경로 예: classified/고1/08_종합_고난도/5_상/2024년_03월_고1수학_학평_q21.png
+// 경로 파싱: 01_수와식_계산/1_하/2024년_03월_고1수학_학평_q01.png
 function parsePath(path, zipName) {
-  const parts = path.split('/');
+  const parts = path.split("/");
   if (parts.length < 3) return null;
 
   const catRaw   = parts[0];
   const diffRaw  = parts[1];
   const filename = parts[2];
-  const gradeMatch = zipName.match(/(고\d)/);
-  const grade = gradeMatch ? gradeMatch[1] : '';
 
-  // 카테고리
-  const catMatch = catRaw.match(/^(\d+)_(.+)$/);
-  const categoryNum  = catMatch ? parseInt(catMatch[1]) : 0;
-  const categoryName = catMatch ? catMatch[2].replace(/_/g, ' ') : catRaw;
+  const gradeM = zipName.match(/(고\d)/);
+  const grade  = gradeM ? gradeM[1] : "";
 
-  // 난이도
-  const diffMatch = diffRaw.match(/^(\d+)_(.+)$/);
-  const diffLevel = diffMatch ? parseInt(diffMatch[1]) : 0;
-  const diffName  = diffMatch ? diffMatch[2] : diffRaw;
+  const catM = catRaw.match(/^(\d+)_(.+)$/);
+  const categoryNum  = catM ? parseInt(catM[1]) : 0;
+  const categoryName = catM ? catM[2].replace(/_/g, " ") : catRaw;
 
-  // 파일명 파싱
-  const fnMatch = filename.match(/(\d{4})년_(\d{2})월_.+?_(학평|모평|수능|학력평가)_q(\d+)/);
-  const year     = fnMatch ? parseInt(fnMatch[1]) : 0;
-  const month    = fnMatch ? parseInt(fnMatch[2]) : 0;
-  const examName = fnMatch ? `${fnMatch[1]}년 ${fnMatch[2]}월 ${fnMatch[3]}` : filename;
-  const qNum     = fnMatch ? parseInt(fnMatch[4]) : 0;
+  const diffM = diffRaw.match(/^(\d+)_(.+)$/);
+  const diffLevel = diffM ? parseInt(diffM[1]) : 0;
+  const diffName  = diffM ? diffM[2] : diffRaw;
+
+  const fnM = filename.match(/(\d{4})년_(\d{2})월_.+?_(학평|모평|수능|학력평가)_q(\d+)/);
+  const year     = fnM ? parseInt(fnM[1]) : 0;
+  const month    = fnM ? parseInt(fnM[2]) : 0;
+  const examName = fnM ? `${fnM[1]}년 ${fnM[2]}월 ${fnM[3]}` : filename;
+  const qNum     = fnM ? parseInt(fnM[4]) : 0;
 
   return { grade, categoryNum, categoryName, diffLevel, diffName, year, month, examName, qNum, imagePath: path };
 }
 
-// ────────────────────────────────────────────────────────────────
 // DB 로드
-// ────────────────────────────────────────────────────────────────
 async function loadDB() {
-  document.getElementById('loadDbBtn').disabled = true;
-  document.getElementById('dbSpin').style.display = 'block';
-  document.getElementById('dbBtnText').textContent = '로드 중...';
-  document.getElementById('dbProgressWrap').style.display = 'block';
+  document.getElementById("loadDbBtn").disabled = true;
+  document.getElementById("dbSpin").style.display = "block";
+  document.getElementById("dbBtnText").textContent = "로드 중...";
+  document.getElementById("dbProgressWrap").style.display = "block";
   db = [];
   zipCache = {};
   let loaded = 0;
 
   for (const zipName of ZIP_FILES) {
-    setDbStatus(`📥 ${zipName} 불러오는 중... (${loaded + 1}/${ZIP_FILES.length})`);
+    setDbStatus("📥 " + zipName + " 불러오는 중... (" + (loaded+1) + "/" + ZIP_FILES.length + ")");
     setDbFill(Math.round((loaded / ZIP_FILES.length) * 90));
     try {
       const res = await fetch(zipName);
-      if (!res.ok) throw new Error(`${zipName} 없음 (${res.status})`);
+      if (!res.ok) throw new Error(zipName + " 없음 (" + res.status + ")");
       const buf = await res.arrayBuffer();
       const zip = await JSZip.loadAsync(buf);
       zipCache[zipName] = zip;
-      zip.forEach((path, file) => {
-        if (!path.endsWith('.png') || file.dir) return;
+      zip.forEach(function(path, file) {
+        if (!path.endsWith(".png") || file.dir) return;
         const parsed = parsePath(path, zipName);
         if (parsed) { parsed.zipName = zipName; db.push(parsed); }
       });
-    } catch (e) { console.warn(e.message); }
+    } catch(e) { console.warn(e.message); }
     loaded++;
   }
 
   setDbFill(100);
-  setDbStatus(`<span class="db-ok">✅ ${db.length.toLocaleString()}개 문제 로드 완료!</span>`);
-  document.getElementById('dbSpin').style.display = 'none';
-  document.getElementById('dbBtnText').textContent = '✅ 로드 완료';
+  setDbStatus('<span class="db-ok">✅ ' + db.length.toLocaleString() + '개 문제 로드 완료!</span>');
+  document.getElementById("dbSpin").style.display = "none";
+  document.getElementById("dbBtnText").textContent = "✅ 로드 완료";
 }
 
-function setDbFill(p) { document.getElementById('dbFill').style.width = p + '%'; }
-function setDbStatus(h) { document.getElementById('dbStatus').innerHTML = h; }
+function setDbFill(p) { document.getElementById("dbFill").style.width = p + "%"; }
+function setDbStatus(h) { document.getElementById("dbStatus").innerHTML = h; }
 
-// ────────────────────────────────────────────────────────────────
 // 파일 업로드
-// ────────────────────────────────────────────────────────────────
 function onFile(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
-    uploadedB64 = ev.target.result.split(',')[1];
-    document.getElementById('previewImg').src = ev.target.result;
-    document.getElementById('previewName').textContent = file.name;
-    document.getElementById('uploadZone').style.display = 'none';
-    document.getElementById('previewWrap').style.display = 'block';
+  reader.onload = function(ev) {
+    uploadedB64 = ev.target.result.split(",")[1];
+    document.getElementById("previewImg").src = ev.target.result;
+    document.getElementById("previewName").textContent = file.name;
+    document.getElementById("uploadZone").style.display = "none";
+    document.getElementById("previewWrap").style.display = "block";
   };
   reader.readAsDataURL(file);
 }
+
 function resetUpload() {
   uploadedB64 = null;
-  document.getElementById('fileInput').value = '';
-  document.getElementById('uploadZone').style.display = 'block';
-  document.getElementById('previewWrap').style.display = 'none';
+  document.getElementById("fileInput").value = "";
+  document.getElementById("uploadZone").style.display = "block";
+  document.getElementById("previewWrap").style.display = "none";
 }
-const zone = document.getElementById('uploadZone');
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
-zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
-zone.addEventListener('drop', e => {
-  e.preventDefault(); zone.classList.remove('drag');
+
+const zone = document.getElementById("uploadZone");
+zone.addEventListener("dragover", function(e) { e.preventDefault(); zone.classList.add("drag"); });
+zone.addEventListener("dragleave", function() { zone.classList.remove("drag"); });
+zone.addEventListener("drop", function(e) {
+  e.preventDefault(); zone.classList.remove("drag");
   const f = e.dataTransfer.files[0];
-  if (f?.type.startsWith('image/')) onFile({ target: { files: [f] } });
+  if (f && f.type.startsWith("image/")) onFile({ target: { files: [f] } });
 });
 
-// ────────────────────────────────────────────────────────────────
 // Gemini API
-// ────────────────────────────────────────────────────────────────
-async function callGemini(prompt, b64 = null) {
+async function callGemini(prompt, b64) {
   const parts = [];
-  if (b64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: b64 } });
+  if (b64) parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
   parts.push({ text: prompt });
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1alpha/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 })
-    }
-  );
-  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `HTTP ${res.status}`); }
+  const url = "https://generativelanguage.googleapis.com/" + GEMINI_VER + "/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_API_KEY;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: parts }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+    })
+  });
+  if (!res.ok) {
+    const e = await res.json();
+    throw new Error(e.error ? e.error.message : "HTTP " + res.status);
+  }
   const data = await res.json();
-  // thinking 모델은 parts가 여러 개일 수 있어서 text 타입만 추출
-  const textPart = data.candidates?.[0]?.content?.parts?.find(p => p.text);
-  if (!textPart) throw new Error('AI 응답을 읽을 수 없습니다.');
+  const textPart = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
+    ? data.candidates[0].content.parts.find(function(p) { return p.text; })
+    : null;
+  if (!textPart) throw new Error("AI 응답을 읽을 수 없습니다.");
   return textPart.text.trim();
 }
 
-// ────────────────────────────────────────────────────────────────
-// 유사도 계산 (폴더 구조 기반 — 매우 정확)
-// ────────────────────────────────────────────────────────────────
+// 유사도 계산
 function calcSim(analysis, p) {
   let s = 0;
-
-  // 1. 카테고리 번호 정확히 일치 (50점) — 핵심
-  if (analysis.categoryNum && p.categoryNum === analysis.categoryNum) s += 50;
-  // 카테고리 이름 부분 일치 (25점)
+  if (analysis.categoryNum && p.categoryNum === analysis.categoryNum) s += 55;
   else if (analysis.categoryName && p.categoryName) {
-    const aWords = analysis.categoryName.split(' ');
-    const pWords = p.categoryName.split(' ');
-    const common = aWords.filter(w => w.length > 1 && pWords.some(pw => pw.includes(w) || w.includes(pw)));
+    const aW = analysis.categoryName.split(" ");
+    const pW = p.categoryName.split(" ");
+    const common = aW.filter(function(w) {
+      return w.length > 1 && pW.some(function(pw) { return pw.includes(w) || w.includes(pw); });
+    });
     s += Math.min(common.length * 12, 25);
   }
-
-  // 2. 난이도 일치 (20점)
   if (analysis.diffLevel && p.diffLevel === analysis.diffLevel) s += 20;
   else if (analysis.diffLevel && Math.abs(p.diffLevel - analysis.diffLevel) === 1) s += 10;
-
-  // 3. 학년 일치 (15점)
   if (analysis.grade && p.grade === analysis.grade) s += 15;
-  // grade 없어도 categoryNum으로만 매칭
-  if (!analysis.grade && p.categoryNum === analysis.categoryNum) s += 10;
-  // 4. 키워드 매칭 (15점)
-  const pText = p.categoryName + ' ' + p.examName;
-  (analysis.keywords || []).forEach(k => {
-    if (pText.includes(k)) s += 3;
-  });
-
+  const pText = p.categoryName + " " + p.examName;
+  (analysis.keywords || []).forEach(function(k) { if (pText.includes(k)) s += 3; });
   return Math.min(Math.round(s), 99);
 }
 
-// ────────────────────────────────────────────────────────────────
 // 메인 검색
-// ────────────────────────────────────────────────────────────────
 async function search() {
-  if (!uploadedB64) { showErr('문제 사진을 먼저 올려주세요.'); return; }
-  if (db.length === 0) { showErr('문제 DB를 먼저 불러와주세요.'); return; }
-  if (GEMINI_API_KEY === '여기에_GEMINI_API_키_입력') { showErr('index.html의 GEMINI_API_KEY를 실제 키로 바꿔주세요.'); return; }
+  if (!uploadedB64) { showErr("문제 사진을 먼저 올려주세요."); return; }
+  if (db.length === 0) { showErr("문제 DB를 먼저 불러와주세요."); return; }
 
   setSearchLoading(true); hideErr();
-  document.getElementById('results').style.display = 'none';
+  document.getElementById("results").style.display = "none";
 
   try {
-    // 1. Gemini로 이미지 분석
-    setStep('AI가 문제 유형과 풀이방법 분석 중...');
-    const raw = await callGemini(`당신은 대한민국 수능 수학 전문가입니다.
-이 수학 문제 이미지를 분석하고, 반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이:
+    setStep("AI가 문제 유형과 풀이방법 분석 중...");
 
-{
-  "grade": "고1 또는 고2 또는 고3",
-  "categoryNum": 카테고리번호(정수),
-  "categoryName": "카테고리명",
-  "diffLevel": 난이도숫자(1~5 정수),
-  "diffName": "하 또는 중하 또는 중 또는 중상 또는 상",
-  "topic": "대단원명",
-  "subtopic": "소단원명",
-  "solution_method": "핵심 풀이방법 (예: 치환적분, 이차방정식 판별식, 코사인법칙 등)",
-  "solution_steps": ["풀이과정1", "풀이과정2", "풀이과정3"],
-  "required_concepts": ["필요개념1", "필요개념2", "필요개념3"],
-  "keywords": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"],
-  "summary": "문제핵심(10자이내)"
-}`, uploadedB64);
+    const prompt = '당신은 수능 수학 전문가입니다. 이 수학 문제를 분석하고 JSON만 출력하세요:\n{\n  "grade": "고1 또는 고2 또는 고3",\n  "categoryNum": 숫자,\n  "categoryName": "카테고리명",\n  "diffLevel": 1에서5사이숫자,\n  "diffName": "하 또는 중하 또는 중 또는 중상 또는 상",\n  "topic": "단원명",\n  "subtopic": "소단원명",\n  "solution_method": "핵심풀이방법",\n  "keywords": ["키워드1","키워드2","키워드3"],\n  "summary": "핵심요약"\n}\n카테고리번호: 고1(01=수와식계산 02=방정식부등식 03=함수그래프 04=도형기하 05=확률통계 06=도형기하심화 07=함수그래프심화 08=종합고난도 09=단답형기본 10=단답형심화 11=단답형최고난도) 고2(01=수와식계산 02=방정식부등식 03=함수그래프 04=집합논리 05=도형좌표기하 06=행렬수열 07=함수심화 08=종합고난도 09=단답형기본 10=단답형심화 11=단답형최고난도) 고3(01~03=기본 04~08=심화 09~11=고난도)';
 
-카테고리 번호 기준:
-고1: 01=수와식계산, 02=방정식부등식, 03=함수그래프, 04=도형기하, 05=확률통계, 06=도형기하심화, 07=함수그래프심화, 08=종합고난도, 09=단답형기본, 10=단답형심화, 11=단답형최고난도
-고2: 01=수와식계산, 02=방정식부등식, 03=함수그래프, 04=집합논리, 05=도형좌표기하, 06=행렬수열, 07=함수심화, 08=종합고난도, 09=단답형기본, 10=단답형심화, 11=단답형최고난도
-고3: 01=경우의수순열조합 또는 수열극한 또는 수열지수로그 또는 이차곡선, 02=미분기본 또는 평면벡터 또는 함수극한 또는 확률기본, 03=공간도형좌표 또는 미적분기본 또는 적분기본 또는 확률분포, 04~10=심화/고난도`, uploadedB64);
+    const raw = await callGemini(prompt, uploadedB64);
 
-    // JSON 안전 파싱
     let analysis;
     try {
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('JSON 없음');
-      // 특수문자 정리
-      const cleaned = jsonMatch[0]
-        .replace(/[\u0000-\u001F\u007F]/g, ' ')  // 제어문자 제거
-        .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')  // 잘못된 이스케이프 수정
-        .replace(/\n/g, ' ')                      // 줄바꿈 제거
-        .replace(/\r/g, ' ');                     // 캐리지리턴 제거
-      analysis = JSON.parse(cleaned);
-    } catch (err) {
-      console.log('파싱 오류:', err.message);
-      console.log('raw 응답:', raw);
-      analysis = { grade: '', categoryNum: 0, categoryName: '', diffLevel: 3, diffName: '중', topic: '', subtopic: '', solution_method: '', solution_steps: [], required_concepts: [], keywords: [], summary: '분석 실패 — 기본값으로 검색합니다' };
+      if (!jsonMatch) throw new Error("JSON 없음");
+      analysis = JSON.parse(jsonMatch[0]);
+    } catch(err) {
+      console.log("파싱 오류:", err.message, "\nraw:", raw);
+      analysis = { grade: "", categoryNum: 0, categoryName: "", diffLevel: 3, diffName: "중", topic: "", subtopic: "", solution_method: "", keywords: [], summary: "분석 실패" };
     }
 
-    // 2. 필터 적용
-    setStep('유사 문제 검색 중...');
-    const fg    = document.getElementById('fGrade').value;
-    const fd    = document.getElementById('fDiff').value;
-    const count = parseInt(document.getElementById('fCount').value);
+    setStep("유사 문제 검색 중...");
+    const fg    = document.getElementById("fGrade").value;
+    const fd    = document.getElementById("fDiff").value;
+    const count = parseInt(document.getElementById("fCount").value);
+    const gradeFilter = fg || analysis.grade || "";
 
-    // AI가 분석한 학년/난이도도 반영
-    const gradeFilter = fg || analysis.grade || '';
-    const diffFilter  = fd;
+    const pool = db.filter(function(p) {
+      if (gradeFilter && p.grade !== gradeFilter) return false;
+      if (fd && p.diffLevel !== parseInt(fd)) return false;
+      return true;
+    });
 
-    let pool = db.filter(p =>
-      (!gradeFilter || p.grade === gradeFilter) &&
-      (!diffFilter  || p.diffLevel === parseInt(diffFilter.split('_')[0]))
-    );
-
-    // 3. 유사도 계산 및 정렬
     const scored = pool
-      .map(p => ({ ...p, similarity: calcSim(analysis, p) }))
-      .sort((a, b) => b.similarity - a.similarity)
+      .map(function(p) { return Object.assign({}, p, { similarity: calcSim(analysis, p) }); })
+      .sort(function(a, b) { return b.similarity - a.similarity; })
       .slice(0, count);
 
     renderResults(analysis, scored);
 
-  } catch (e) {
-    showErr('오류: ' + e.message);
+  } catch(e) {
+    showErr("오류: " + e.message);
   } finally {
     setSearchLoading(false);
   }
 }
 
-// ────────────────────────────────────────────────────────────────
 // 결과 렌더링
-// ────────────────────────────────────────────────────────────────
 function renderResults(analysis, problems) {
-  document.getElementById('rcnt').textContent = `${problems.length}개 추천`;
+  document.getElementById("rcnt").textContent = problems.length + "개 추천";
 
-  document.getElementById('abox').innerHTML = `
-    <h4>📊 업로드한 문제 분석</h4>
-    <div class="tags">
-      ${analysis.grade ? `<span class="tag t1">${analysis.grade}</span>` : ''}
-      ${analysis.topic ? `<span class="tag t1">${analysis.topic}</span>` : ''}
-      ${analysis.subtopic ? `<span class="tag t1">${analysis.subtopic}</span>` : ''}
-      ${analysis.diffName ? `<span class="tag t2">난이도: ${analysis.diffName}</span>` : ''}
-      ${analysis.categoryName ? `<span class="tag t3">유형: ${analysis.categoryName}</span>` : ''}
-    </div>
-    ${analysis.solution_method ? `<div style="margin-top:8px;font-size:0.82rem;"><strong style="color:var(--accent)">🔧 풀이방법:</strong> ${analysis.solution_method}</div>` : ''}
-    ${(analysis.solution_steps||[]).length ? `<div style="margin-top:5px;font-size:0.79rem;color:var(--text2)"><strong>풀이과정:</strong> ${analysis.solution_steps.join(' → ')}</div>` : ''}
-    ${(analysis.required_concepts||[]).length ? `<div style="margin-top:6px;" class="tags">${analysis.required_concepts.map(c=>`<span class="tag t5">${c}</span>`).join('')}</div>` : ''}
-    <p style="font-size:0.79rem;color:var(--text2);margin-top:7px;">${analysis.summary}</p>`;
+  let ahtml = '<h4>📊 업로드한 문제 분석</h4><div class="tags">';
+  if (analysis.grade) ahtml += '<span class="tag t1">' + analysis.grade + '</span>';
+  if (analysis.topic) ahtml += '<span class="tag t1">' + analysis.topic + '</span>';
+  if (analysis.subtopic) ahtml += '<span class="tag t1">' + analysis.subtopic + '</span>';
+  if (analysis.diffName) ahtml += '<span class="tag t2">난이도: ' + analysis.diffName + '</span>';
+  if (analysis.categoryName) ahtml += '<span class="tag t3">유형: ' + analysis.categoryName + '</span>';
+  ahtml += '</div>';
+  if (analysis.solution_method) ahtml += '<div style="margin-top:8px;font-size:0.82rem;"><strong style="color:var(--accent)">🔧 풀이방법:</strong> ' + analysis.solution_method + '</div>';
+  if (analysis.summary) ahtml += '<p style="font-size:0.79rem;color:var(--text2);margin-top:7px;">' + analysis.summary + '</p>';
+  document.getElementById("abox").innerHTML = ahtml;
 
-  const container = document.getElementById('pcards');
-  container.innerHTML = '';
+  const container = document.getElementById("pcards");
+  container.innerHTML = "";
 
-  problems.forEach((p, i) => {
-    const sc = p.similarity >= 65 ? 'sh' : p.similarity >= 40 ? 'sm' : 'sl';
-    const sl = p.similarity >= 65 ? '유사' : p.similarity >= 40 ? '관련' : '참고';
+  problems.forEach(function(p, i) {
+    const sc = p.similarity >= 65 ? "sh" : p.similarity >= 40 ? "sm" : "sl";
+    const sl = p.similarity >= 65 ? "유사" : p.similarity >= 40 ? "관련" : "참고";
 
-    const card = document.createElement('div');
-    card.className = 'pcard';
-    card.innerHTML = `
-      <div class="ptop">
-        <div class="pnum">${i+1}</div>
-        <div class="pinfo">
-          <div class="pexam">${p.examName} ${p.qNum ? p.qNum+'번' : ''}</div>
-          <div class="pmeta">
-            <span class="pmeta-tag">${p.grade}</span>
-            <span class="pmeta-tag">${p.categoryName}</span>
-            <span class="pmeta-tag">난이도: ${p.diffName}</span>
-          </div>
-        </div>
-        <span class="sbadge ${sc}">${sl} ${p.similarity}%</span>
-      </div>
-      <div class="pimg-wrap" id="imgwrap-${i}">
-        <div class="pimg-loading">이미지 불러오는 중...</div>
-      </div>
-      <div class="pfooter">
-        <div class="sbar-wrap">
-          <span>유사도</span>
-          <div class="sbar"><div class="sfill" style="width:${p.similarity}%"></div></div>
-          <span>${p.similarity}%</span>
-        </div>
-        <span style="font-size:0.72rem;color:var(--text3)">${p.year}년 ${p.month}월</span>
-      </div>`;
+    const card = document.createElement("div");
+    card.className = "pcard";
+    card.innerHTML =
+      '<div class="ptop">' +
+        '<div class="pnum">' + (i+1) + '</div>' +
+        '<div class="pinfo">' +
+          '<div class="pexam">' + p.examName + (p.qNum ? " " + p.qNum + "번" : "") + '</div>' +
+          '<div class="pmeta">' +
+            '<span class="pmeta-tag">' + p.grade + '</span>' +
+            '<span class="pmeta-tag">' + p.categoryName + '</span>' +
+            '<span class="pmeta-tag">난이도: ' + p.diffName + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<span class="sbadge ' + sc + '">' + sl + ' ' + p.similarity + '%</span>' +
+      '</div>' +
+      '<div class="pimg-wrap" id="imgwrap-' + i + '">' +
+        '<div class="pimg-loading">이미지 불러오는 중...</div>' +
+      '</div>' +
+      '<div class="pfooter">' +
+        '<div class="sbar-wrap">' +
+          '<span>유사도</span>' +
+          '<div class="sbar"><div class="sfill" style="width:' + p.similarity + '%"></div></div>' +
+          '<span>' + p.similarity + '%</span>' +
+        '</div>' +
+        '<span style="font-size:0.72rem;color:var(--text3)">' + p.year + '년 ' + p.month + '월</span>' +
+      '</div>';
     container.appendChild(card);
     loadImage(p, i);
   });
 
-  document.getElementById('results').style.display = 'block';
-  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById("results").style.display = "block";
+  document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ────────────────────────────────────────────────────────────────
-// ZIP에서 이미지 로드
-// ────────────────────────────────────────────────────────────────
+// 이미지 로드
 async function loadImage(p, idx) {
-  const wrap = document.getElementById(`imgwrap-${idx}`);
-  if (!wrap || !zipCache) return;
+  const wrap = document.getElementById("imgwrap-" + idx);
+  if (!wrap) return;
   try {
     const zip = zipCache[p.zipName];
-    if (!zip) throw new Error('ZIP 없음');
+    if (!zip) throw new Error("ZIP 없음");
     const file = zip.file(p.imagePath);
-    if (!file) throw new Error('파일 없음');
-    const blob = await file.async('blob');
+    if (!file) throw new Error("파일 없음");
+    const blob = await file.async("blob");
     const url = URL.createObjectURL(blob);
-    wrap.innerHTML = `<img src="${url}" alt="${p.examName}" onclick="openModal('${url}')" loading="lazy">`;
-  } catch {
-    wrap.innerHTML = `<div class="pimg-loading">이미지를 불러올 수 없습니다</div>`;
+    wrap.innerHTML = '<img src="' + url + '" alt="' + p.examName + '" onclick="openModal(\'' + url + '\')" loading="lazy">';
+  } catch(e) {
+    wrap.innerHTML = '<div class="pimg-loading">이미지를 불러올 수 없습니다</div>';
   }
 }
 
-// ────────────────────────────────────────────────────────────────
-// 유틸
-// ────────────────────────────────────────────────────────────────
 function setSearchLoading(on) {
-  document.getElementById('loading').style.display = on ? 'block' : 'none';
-  document.getElementById('searchSpin').style.display = on ? 'block' : 'none';
-  document.getElementById('searchBtnText').textContent = on ? '분석 중...' : '유사 문제 찾기';
-  document.getElementById('searchBtn').disabled = on;
+  document.getElementById("loading").style.display = on ? "block" : "none";
+  document.getElementById("searchSpin").style.display = on ? "block" : "none";
+  document.getElementById("searchBtnText").textContent = on ? "분석 중..." : "유사 문제 찾기";
+  document.getElementById("searchBtn").disabled = on;
 }
-function setStep(t) { document.getElementById('lstep').textContent = t; }
-function showErr(m) { const b=document.getElementById('errBox'); b.textContent='⚠ '+m; b.style.display='block'; }
-function hideErr() { document.getElementById('errBox').style.display='none'; }
-function openModal(src) { document.getElementById('modalImg').src=src; document.getElementById('modal').classList.add('open'); }
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function setStep(t) { document.getElementById("lstep").textContent = t; }
+function showErr(m) { const b = document.getElementById("errBox"); b.textContent = "⚠ " + m; b.style.display = "block"; }
+function hideErr() { document.getElementById("errBox").style.display = "none"; }
+function openModal(src) { document.getElementById("modalImg").src = src; document.getElementById("modal").classList.add("open"); }
+function closeModal() { document.getElementById("modal").classList.remove("open"); }
 </script>
 </body>
 </html>
