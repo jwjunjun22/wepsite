@@ -192,7 +192,7 @@
 
 <script>
 const GEMINI_API_KEY = "AIzaSyCf4VSuKoT02KgZGjmK30LEBrIoKxsH7QA";
-const GEMINI_MODEL   = "gemini-2.5-flash"; // 최신 안정화 모델로 교체
+const GEMINI_MODEL   = "gemini-2.5-flash";
 const GEMINI_VER     = "v1beta";
 const ZIP_FILES      = ["./고1.zip", "./고2.zip", "./고3.zip"];
 
@@ -200,35 +200,46 @@ let db = [];
 let zipCache = {};
 let uploadedB64 = null;
 
-// 경로 파싱: 01_수와식_계산/1_하/2026년_03월_고1수학_학평_q01.png
+// 경로 파싱 함수 (사용자가 묶어둔 실제 폴더/단원 이름 원본 유지)
 function parsePath(path, zipName) {
   const parts = path.split("/");
   if (parts.length < 3) return null;
 
-  const catRaw   = parts[0];
-  const diffRaw  = parts[1];
-  const filename = parts[2];
+  const catRaw   = parts[0]; // 예: "01_지수와_로그"
+  const diffRaw  = parts[1]; // 예: "3_중"
+  const filename = parts[2]; // 예: "2026년_03월_고1수학_학평_q02.png"
 
   const gradeM = zipName.match(/(고\d)/);
   const grade  = gradeM ? gradeM[1] : "";
 
   const catM = catRaw.match(/^(\d+)_(.+)$/);
   const categoryNum  = catM ? parseInt(catM[1]) : 0;
+  // 검색 정확도를 위해 폴더명 원본(예: "01_지수와_로그")과 공백제거본을 다 들고 있도록 설계
   const categoryName = catM ? catM[2].replace(/_/g, " ") : catRaw;
 
-  // 난이도 안전 파싱 (캡처된 구조에 완벽 조정)
   const diffM = diffRaw.match(/^(\d+)_(.+)$/);
   const diffLevel = diffM ? parseInt(diffM[1]) : (parseInt(diffRaw) || 0);
   const diffName  = diffM ? diffM[2] : diffRaw;
 
-  // 파일네임 기출 속성 추출 규칙
   const fnM = filename.match(/(\d{4})년_(\d{2})월_.+?_(학평|모평|수능|학력평가)_q(\d+)/);
   const year     = fnM ? parseInt(fnM[1]) : 0;
   const month    = fnM ? parseInt(fnM[2]) : 0;
   const examName = fnM ? `${fnM[1]}년 ${fnM[2]}월 ${fnM[3]}` : filename.replace(".png", "").replace(/_/g, " ");
   const qNum     = fnM ? parseInt(fnM[4]) : 0;
 
-  return { grade, categoryNum, categoryName, diffLevel, diffName, year, month, examName, qNum, imagePath: path };
+  return { 
+    grade, 
+    categoryNum, 
+    categoryName, 
+    categoryRaw: catRaw, // 원본 폴더 이름 저장 (중요)
+    diffLevel, 
+    diffName, 
+    year, 
+    month, 
+    examName, 
+    qNum, 
+    imagePath: path 
+  };
 }
 
 // DB 로드
@@ -251,7 +262,6 @@ async function loadDB() {
       const zip = await JSZip.loadAsync(buf);
       zipCache[zipName] = zip;
       
-      // zip 객체의 keys 배열을 순회하여 비동기 처리 누수 방지
       const keys = Object.keys(zip.files);
       for (const path of keys) {
         const file = zip.files[path];
@@ -306,7 +316,7 @@ zone.addEventListener("drop", function(e) {
   if (f && f.type.startsWith("image/")) onFile({ target: { files: [f] } });
 });
 
-// Gemini API 호출 (구조화된 JSON 스키마 강제 규칙 주입)
+// Gemini API 호출
 async function callGemini(prompt, b64) {
   const parts = [];
   if (b64) parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
@@ -314,13 +324,11 @@ async function callGemini(prompt, b64) {
 
   const url = "https://generativelanguage.googleapis.com/" + GEMINI_VER + "/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_API_KEY;
   
-  // responseSchema를 이용해 완벽한 JSON 출력 강제화 (파싱오류 원천차단)
   const responseSchema = {
     type: "OBJECT",
     properties: {
       grade: { type: "STRING" },
-      categoryNum: { type: "INTEGER" },
-      categoryName: { type: "STRING" },
+      matchedFolder: { type: "STRING" }, // 실제 매칭된 폴더명 원본 저장용 추가
       diffLevel: { type: "INTEGER" },
       diffName: { type: "STRING" },
       topic: { type: "STRING" },
@@ -329,7 +337,7 @@ async function callGemini(prompt, b64) {
       keywords: { type: "ARRAY", items: { type: "STRING" } },
       summary: { type: "STRING" }
     },
-    required: ["grade", "categoryNum", "categoryName", "diffLevel", "diffName", "topic", "subtopic", "solution_method", "keywords", "summary"]
+    required: ["grade", "matchedFolder", "diffLevel", "diffName", "topic", "subtopic", "solution_method", "keywords", "summary"]
   };
 
   const res = await fetch(url, {
@@ -358,34 +366,41 @@ async function callGemini(prompt, b64) {
   return textPart.text.trim();
 }
 
-// 유사도 매칭 알고리즘 최적화
+// 똑똑해진 유사도 알고리즘 (사용자가 묶어둔 폴더 내부 매칭 가중치 극대화)
 function calcSim(analysis, p) {
   let s = 0;
-  // 1순위 대단원 번호 일치 시 기본 점수 부여
-  if (analysis.categoryNum && p.categoryNum === analysis.categoryNum) s += 55;
-  else if (analysis.categoryName && p.categoryName) {
-    const aW = analysis.categoryName.split(" ");
-    const pW = p.categoryName.split(" ");
-    const common = aW.filter(function(w) {
-      return w.length > 1 && pW.some(function(pw) { return pw.includes(w) || w.includes(pw); });
-    });
-    s += Math.min(common.length * 12, 25);
+
+  // 1순위: AI가 골라낸 실제 DB 폴더 이름과 완벽히 일치하는 경우 최고점 부여 (55점)
+  if (analysis.matchedFolder && p.categoryRaw === analysis.matchedFolder) {
+    s += 65; 
+  } else if (analysis.matchedFolder) {
+    // 부분 글자 일치 비교 보정
+    const cleanFolder = analysis.matchedFolder.replace(/\d+_/g, "").replace(/_/g, "");
+    const cleanDbFolder = p.categoryRaw.replace(/\d+_/g, "").replace(/_/g, "");
+    if (cleanDbFolder.includes(cleanFolder) || cleanFolder.includes(cleanDbFolder)) {
+      s += 45;
+    }
   }
   
-  // 2순위 난이도 매칭 점수
+  // 2순위: 난이도 일치 (20점)
   if (analysis.diffLevel && p.diffLevel === analysis.diffLevel) s += 20;
   else if (analysis.diffLevel && Math.abs(p.diffLevel - analysis.diffLevel) === 1) s += 10;
   
-  // 3순위 학년 매칭 점수
-  if (analysis.grade && p.grade === analysis.grade) s += 15;
+  // 3순위: 학년 일치 (10점)
+  if (analysis.grade && p.grade === analysis.grade) s += 10;
   
-  // 키워드 분석 점수 보정
+  // 4순위: 세부 풀이법 키워드 검증 매칭 (5점)
   const pText = p.categoryName + " " + p.examName;
-  (analysis.keywords || []).forEach(function(k) { if (pText.includes(k)) s += 3; });
+  let keywordHits = 0;
+  (analysis.keywords || []).forEach(function(k) { 
+    if (pText.includes(k) || p.categoryRaw.includes(k)) keywordHits++; 
+  });
+  s += Math.min(keywordHits * 3, 5);
+
   return Math.min(Math.round(s), 99);
 }
 
-// 메인 검색 엔진
+// 메인 검색
 async function search() {
   if (!uploadedB64) { showErr("문제 사진을 먼저 올려주세요."); return; }
   if (db.length === 0) { showErr("문제 DB를 먼저 불러와주세요."); return; }
@@ -394,9 +409,24 @@ async function search() {
   document.getElementById("results").style.display = "none";
 
   try {
-    setStep("AI가 문제 유형과 풀이방법 분석 중...");
+    setStep("사용자 데이터베이스의 폴더 분석 중...");
 
-    const prompt = '당신은 대한민국 수능/평가원 수학 전문가입니다. 업로드된 수학 문제 이미지를 분석하여 규칙에 맞는 데이터 구조를 추출하세요. 카테고리번호 할당 규칙은 다음과 같습니다: 고1(01=수와식계산 02=방정식부등식 03=함수그래프 04=도형기하 05=확률통계 06=도형기하심화 07=함수그래프심화 08=종합고난도 09=단답형기본 10=단답형심화 11=단답형최고난도), 고2/고3도 이에 맞춰 유연하게 할당하십시오.';
+    // 현재 로드된 실제 기출문제 폴더 목록을 동적으로 추출하여 리스트업합니다.
+    const folderSet = new Set();
+    db.forEach(p => { if(p.categoryRaw) folderSet.add(p.categoryRaw); });
+    const dynamicFolderList = Array.from(folderSet).join(", ");
+
+    const prompt = `당신은 고등학교 기출 기하/대수/미적분 수학 전문가입니다. 
+업로드된 문제를 분석하고, 이 문제가 다음 제공되는 [실제 데이터베이스 폴더 목록] 중 어떤 폴더에 들어가야 하는지 가장 올바른 폴더명을 단 하나 골라 'matchedFolder'에 똑같이 기입하세요.
+
+[실제 데이터베이스 폴더 목록]
+${dynamicFolderList}
+
+[작성 규칙]
+1. grade: 반드시 "고1", "고2", "고3" 중 하나로 매칭하세요.
+2. matchedFolder: 위의 목록에 적힌 글자(예: 01_지수와_로그)와 토씨 하나 틀리지 않고 100% 똑같이 반환해야 합니다. 목록에 알맞은 단원이 없다면 문제 개념과 가장 유사한 폴더명을 추정하여 작성하세요.
+3. diffLevel: 1~5점 사이 난이도.
+4. diffName: 하, 중하, 중, 중상, 상 중 선택.`;
 
     const raw = await callGemini(prompt, uploadedB64);
 
@@ -404,16 +434,17 @@ async function search() {
     try {
       analysis = JSON.parse(raw);
     } catch(err) {
-      // 대안 파싱 (마크다운 블록 제거 시도)
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (jsonMatch) analysis = JSON.parse(jsonMatch[0]);
       else throw new Error("JSON 구조 해석 불가");
     }
 
-    setStep("유사 기출문제 대조 및 필터링 중...");
+    setStep("같은 폴더(유형) 내에서 유사도 정렬 중...");
     const fg    = document.getElementById("fGrade").value;
     const fd    = document.getElementById("fDiff").value;
     const count = parseInt(document.getElementById("fCount").value);
+    
+    // 조건 필터링
     const gradeFilter = fg || analysis.grade || "";
 
     const pool = db.filter(function(p) {
@@ -422,15 +453,18 @@ async function search() {
       return true;
     });
 
+    // 매칭 스코어링 및 슬라이싱
     const scored = pool
       .map(function(p) { return Object.assign({}, p, { similarity: calcSim(analysis, p) }); })
       .sort(function(a, b) { return b.similarity - a.similarity; })
       .slice(0, count);
 
+    // 가짜 필드 호환 레이어
+    analysis.categoryName = analysis.matchedFolder ? analysis.matchedFolder.replace(/\d+_/g, "").replace(/_/g, " ") : "수학";
     renderResults(analysis, scored);
 
   } catch(e) {
-    showErr("오류 발생: " + e.message + " (다시 시도해주거나 API 키 및 네트워크를 확인하세요.)");
+    showErr("오류 발생: " + e.message);
   } finally {
     setSearchLoading(false);
   }
@@ -445,7 +479,7 @@ function renderResults(analysis, problems) {
   if (analysis.topic) ahtml += '<span class="tag t1">' + analysis.topic + '</span>';
   if (analysis.subtopic) ahtml += '<span class="tag t1">' + analysis.subtopic + '</span>';
   if (analysis.diffName) ahtml += '<span class="tag t2">예상 난이도: ' + analysis.diffName + '</span>';
-  if (analysis.categoryName) ahtml += '<span class="tag t3">유형: ' + analysis.categoryName + '</span>';
+  if (analysis.categoryName) ahtml += '<span class="tag t3">추천 폴더 단원: ' + analysis.categoryName + '</span>';
   ahtml += '</div>';
   if (analysis.solution_method) ahtml += '<div style="margin-top:8px;font-size:0.82rem;"><strong style="color:var(--accent)">🔧 핵심 풀이 접근법:</strong> ' + analysis.solution_method + '</div>';
   if (analysis.summary) ahtml += '<p style="font-size:0.79rem;color:var(--text2);margin-top:7px;">' + analysis.summary + '</p>';
@@ -496,7 +530,7 @@ function renderResults(analysis, problems) {
   document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Blob을 이용한 내부 ZIP 이미지 다이렉트 렌더링
+// 압축 이미지 로드
 async function loadImage(p, idx) {
   const wrap = document.getElementById("imgwrap-" + idx);
   if (!wrap) return;
