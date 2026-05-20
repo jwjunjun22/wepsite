@@ -417,7 +417,9 @@ async function search() {
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error();
       analysis = JSON.parse(jsonMatch[0]);
-    } catch {
+    } catch (err) {
+      console.log('파싱 오류:', err.message);
+      console.log('raw 응답:', raw);
       analysis = { grade: '', categoryNum: 0, categoryName: '', diffLevel: 3, diffName: '중', topic: '', subtopic: '', solution_method: '', solution_steps: [], required_concepts: [], keywords: [], summary: '분석 실패 — 기본값으로 검색합니다' };
     }
 
