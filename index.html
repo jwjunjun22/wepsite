@@ -191,7 +191,7 @@
 </div>
 
 <script>
-const GEMINI_API_KEY = "AIzaSyC--niRHKT2DIWloZsNauFKJku5LBU3TGM";
+const GEMINI_API_KEY = "";
 const GEMINI_MODEL   = "gemini-2.5-flash";
 const GEMINI_VER     = "v1beta";
 const ZIP_FILES      = ["./고1.zip", "./고2.zip", "./고3.zip"];
@@ -319,7 +319,7 @@ async function callGemini(prompt, b64) {
   if (b64) parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
   parts.push({ text: prompt });
 
-  const url = "https://generativelanguage.googleapis.com/" + GEMINI_VER + "/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_API_KEY;
+  const url = "/.netlify/functions/gemini";
   
   const responseSchema = {
     type: "OBJECT",
@@ -341,12 +341,16 @@ async function callGemini(prompt, b64) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: parts }],
-      generationConfig: { 
-        temperature: 0.1, 
-        maxOutputTokens: 4000,
-        responseMimeType: "application/json",
-        responseSchema: responseSchema
+      model: GEMINI_MODEL,
+      version: GEMINI_VER,
+      payload: {
+        contents: [{ parts: parts }],
+        generationConfig: { 
+          temperature: 0.1, 
+          maxOutputTokens: 4000,
+          responseMimeType: "application/json",
+          responseSchema: responseSchema
+        }
       }
     })
   });
